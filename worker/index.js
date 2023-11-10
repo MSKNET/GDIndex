@@ -9,54 +9,99 @@ async function onGet(request) {
 	let { pathname: path } = request
 	const rootId =
 		request.searchParams.get('rootId') || self.props.default_root_id
-	if (path.startsWith('/~_~_gdindex/resources/')) {
-		const remain = path.replace('/~_~_gdindex/resources/', '')
-		const r = await fetch(
-			`https://raw.githubusercontent.com/MSKNET/GDIndex/master/web/dist/${remain}`
+
+	try {
+		// Parse If-Modified-Since header and modifiedTime to Date objects
+		const ifModifiedSince = new Date(
+			request.headers.get('If-Modified-Since')
 		)
-		return new Response(r.body, {
-			headers: {
-				'Content-Type': mime.getType(remain) + '; charset=utf-8',
-				'Cache-Control': 'max-age=600'
+
+		if (isNaN(ifModifiedSince)) {
+			throw new Error('Invalid If-Modified-Since header date')
+		}
+
+		if (path.startsWith('/~_~_gdindex/resources/')) {
+			const remain = path.replace('/~_~_gdindex/resources/', '')
+			const r = await fetch(
+				`https://raw.githubusercontent.com/MSKNET/GDIndex/master/web/dist/${remain}`,
+				{
+					headers: {
+						'If-Modified-Since': ifModifiedSince.toUTCString()
+					}
+				}
+			)
+
+			if (r.status === 304) {
+				return new Response(null, {
+					status: 304
+				})
 			}
-		})
-	} else if (path === '/~_~_gdindex/drives') {
-		return new Response(JSON.stringify(await gd.listDrive()), {
-			headers: {
-				'Content-Type': 'application/json'
-			}
-		})
-	} else if (path.substr(-1) === '/' || path.startsWith('/~viewer')) {
-		return new Response(HTML, {
-			headers: {
-				'Content-Type': 'text/html; charset=utf-8'
-			}
-		})
-	} else {
-		const result = await gd.getMetaByPath(path, rootId)
-		if (!result) {
-			return new Response('null', {
+
+			return new Response(r.body, {
+				headers: {
+					'Content-Type': mime.getType(remain) + '; charset=utf-8',
+					'Cache-Control': 'max-age=600'
+				}
+			})
+		} else if (path === '/~_~_gdindex/drives') {
+			return new Response(JSON.stringify(await gd.listDrive()), {
 				headers: {
 					'Content-Type': 'application/json'
-				},
-				status: 404
+				}
 			})
-		}
-		const isGoogleApps = result.mimeType.includes('vnd.google-apps')
-		if (!isGoogleApps) {
-			const r = await gd.download(result.id, request.headers.get('Range'))
-			const h = new Headers(r.headers)
-			h.set(
-				'Content-Disposition',
-				`inline; filename*=UTF-8''${encodeURIComponent(result.name)}`
-			)
-			return new Response(r.body, {
-				status: r.status,
-				headers: h
+		} else if (path.substr(-1) === '/' || path.startsWith('/~viewer')) {
+			return new Response(HTML, {
+				headers: {
+					'Content-Type': 'text/html; charset=utf-8'
+				}
 			})
 		} else {
-			return Response.redirect(result.webViewLink, 302)
+			const result = await gd.getMetaByPath(path, rootId)
+			if (!result) {
+				return new Response('null', {
+					headers: {
+						'Content-Type': 'application/json'
+					},
+					status: 404
+				})
+			}
+
+			const isGoogleApps = result.mimeType.includes('vnd.google-apps')
+			const modifiedTime = new Date(result.modifiedTime)
+
+			if (ifModifiedSince && modifiedTime <= ifModifiedSince) {
+				return new Response(null, {
+					status: 304
+				})
+			}
+
+			if (!isGoogleApps) {
+				const r = await gd.download(
+					result.id,
+					request.headers.get('Range')
+				)
+				const h = new Headers(r.headers)
+				h.set(
+					'Content-Disposition',
+					`inline; filename*=UTF-8''${encodeURIComponent(
+						result.name
+					)}`
+				)
+				return new Response(r.body, {
+					status: r.status,
+					headers: h
+				})
+			} else {
+				return Response.redirect(result.webViewLink, 302)
+			}
 		}
+	} catch (error) {
+		return new Response('Error: ' + error.message, {
+			status: 500,
+			headers: {
+				'Content-Type': 'text/plain'
+			}
+		})
 	}
 }
 async function onPost(request) {
