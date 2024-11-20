@@ -263,7 +263,7 @@ async function handleRequest(request) {
 		for (const f of files) {
 			const isf = f.mimeType === 'application/vnd.google-apps.folder'
 			const p = encodePathComponent(path + f.name)
-			fileht += `<li><a href="${p + (isf ? '/' : '')}">${f.name}</a></li>`
+			fileht += `<li><a href="${p + (isf ? '/' : '')}">${f.name + (isf ? '/' : '')}</a></li>`
 		}
 		const ht = `<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">
 <html>
