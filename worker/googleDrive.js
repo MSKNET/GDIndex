@@ -68,6 +68,7 @@ class GoogleDrive {
 		await this.initializeClient()
 		return this.client.get(`files/${id}`, {
 			qs: {
+				acknowledgeAbuse: true,
 				includeItemsFromAllDrives: true,
 				supportsAllDrives: true,
 				alt: 'media'

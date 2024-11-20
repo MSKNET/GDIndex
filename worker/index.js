@@ -244,13 +244,21 @@ async function handleRequest(request) {
 	) {
 		// lite mode
 		const path = request.pathname
-		let parent = encodePathComponent(
-			path.split('/').slice(0, -2).join('/') + '/'
-		)
+		let parent = path === '/' ? '' : `<li><a href="${encodePathComponent(path.split('/').slice(0, -2).join('/') + '/')}"> Parent Directory</a></li>`
 		const { files } = await gd.listFolderByPath(
 			path,
 			self.props.default_root_id
 		)
+
+		// Check if README.html exists
+		const readmeFile = files.find(f => f.name === 'README.html')
+		let readmeContent = ''
+		if (readmeFile) {
+			const readme = await gd.download(readmeFile.id)
+			const readmeText = await readme.text()
+			readmeContent = `<div class="readme-content">${readmeText}</div>`
+		}
+
 		let fileht = ''
 		for (const f of files) {
 			const isf = f.mimeType === 'application/vnd.google-apps.folder'
@@ -263,11 +271,29 @@ async function handleRequest(request) {
 <title>Index of ${path}</title>
 </head>
 <body>
+${readmeContent}
 <h1>Index of ${path}</h1>
-<ul>
-<li><a href="${parent}"> Parent Directory</a></li>
+<input type="text" id="searchInput" placeholder="Search files in current directory..." oninput="filterFiles()" style="width: 300px; padding: 12px 20px; margin: 8px 0; box-sizing: border-box; border: 2px solid #ccc; border-radius: 4px;">
+<ul id="fileList">
+${parent}
 ${fileht}
 </ul>
+<script>
+function filterFiles() {
+  const query = document.getElementById('searchInput').value.toLowerCase();
+  const files = document.querySelectorAll('#fileList li');
+  files.forEach(file => {
+    const text = file.textContent.toLowerCase();
+    file.style.display = text.includes(query) ? '' : 'none';
+  });
+}
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape' && document.activeElement === document.getElementById('searchInput')) {
+	document.getElementById('searchInput').value = '';
+	filterFiles();
+  }
+});
+</script>
 </body>
 </html>`
 		return new Response(ht, {
